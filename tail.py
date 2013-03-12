@@ -1,66 +1,88 @@
-#!/usr/bin/env python
+#-------------------------------------------------------------------------------
+# Name:        tail
+# Purpose:     Tail -f specified file in anther thread.
+#
+# Author:      Takai,Y (ypsilon.takai)
+#
+# Created:     06/03/2013
+#-------------------------------------------------------------------------------
+'''
+Tail tool -- Unix 'tail -f' like functionality in python.
+
+Work as another thread for asyncronous file watching.
+
+Usage:
+1. Create with args.
+  tailed_file : <file path>
+     Target file to tail -f.
+  headortail  : (head|tail)
+     File contents will be output from top-most position if 'head' is specified.
+     Else, read point will move to bottom and only new contents will be output.
+  interval    : <sec>
+     Checks new entry every interval seconds.
+2. Set callback func with register_callback.
+  func  : <call back func>
+     Func will be called with single line text. If multiple lines will come, 
+     func will be called multiple times for every lines.
+
+3. Call start to start.
 
 '''
-Python-Tail - Unix tail follow implementation in Python. 
-
-python-tail can be used to monitor changes to a file.
-
-Example:
-    import tail
-
-    # Create a tail instance
-    t = tail.Tail('file-to-be-followed')
-
-    # Register a callback function to be called when a new line is found in the followed file. 
-    # If no callback function is registerd, new lines would be printed to standard out.
-    t.register_callback(callback_function)
-
-    # Follow the file with 5 seconds as sleep time between iterations. 
-    # If sleep time is not provided 1 second is used as the default time.
-    t.follow(s=5) '''
-
-# Author - Kasun Herath <kasunh01 at gmail.com>
-# Source - https://github.com/kasun/python-tail
 
 import os
 import sys
 import time
+import threading
 
-class Tail(object):
-    ''' Represents a tail command. '''
-    def __init__(self, tailed_file):
-        ''' Initiate a Tail instance.
-            Check for file validity, assigns callback function to standard out.
-            
-            Arguments:
-                tailed_file - File to be followed. '''
+class Tail(threading.Thread):
 
+    def __init__(self, tailed_file, headortail='head', interval=5):
         self.check_file_validity(tailed_file)
+
+        threading.Thread.__init__(self)
+
         self.tailed_file = tailed_file
         self.callback = sys.stdout.write
+        self.headortail = headortail
+        self.finish = False
+        self.interval = interval
 
-    def follow(self, s=1):
-        ''' Do a tail follow. If a callback function is registered it is called with every new line. 
-        Else printed to standard out.
-    
-        Arguments:
-            s - Number of seconds to wait between each iteration; Defaults to 1. '''
+    def __del__ (self):
+        self.finish = True
 
+    def run(self):
+        self.follow()
+
+    def stop (self):
+        self.finish = True
+
+    def follow(self):
         with open(self.tailed_file) as file_:
             # Go to the end of file
-            file_.seek(0,2)
+            if self.headortail == 'tail':
+                file_.seek(0,2)
+            else:
+                file_.seek(0,0)
+
             while True:
                 curr_position = file_.tell()
                 line = file_.readline()
                 if not line:
                     file_.seek(curr_position)
+                    time.sleep(self.interval)
                 else:
                     self.callback(line)
-                time.sleep(s)
+
+                if self.finish:
+                    break
 
     def register_callback(self, func):
         ''' Overrides default callback function to provided function. '''
         self.callback = func
+
+    def set_intarval (self, interval):
+        self.interval = interval
+
 
     def check_file_validity(self, file_):
         ''' Check whether the a given file exists, readable and is a file '''
